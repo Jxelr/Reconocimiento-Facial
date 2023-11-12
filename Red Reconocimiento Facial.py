@@ -4,6 +4,7 @@ utilizando TensorFlow y Keras."""
 
 #Importación de Librerias
 import tensorflow as tf
+from keras import Model
 from keras import layers, models
 from keras.optimizers.legacy import Adam
 from keras.preprocessing.image import ImageDataGenerator
@@ -40,6 +41,9 @@ print(df.head())
 #exit()
 """
 
+#Debo cargar la nueva base de datos con imágenes etiquetadas con imágenes de mi rostro (1) 
+# e imagenes de rostros que no sean el mío (0)
+
 
 #Crea conjuntos de datos para nombres de archivos y atributos 
 files = tf.data.Dataset.from_tensor_slices(df[0])
@@ -74,8 +78,14 @@ for image, attri in labeled_images.take(2):
     plt.imshow(image)
     plt.show()
 
+
+
+
+"""
 # Dividir los datos en conjuntos de entrenamiento y prueba
 train_df, test_df = train_test_split(df, test_size=0.2)
+"""
+
 
 # Definir la arquitectura de la red convolucional
 model = models.Sequential()
@@ -89,6 +99,7 @@ model.add(layers.Flatten())
 model.add(layers.Dense(128, activation='relu'))
 model.add(layers.Dense(40, activation='sigmoid'))  # Capa de salida con 40 neuronas (40 atributos)
 
+"""
 # Compilar el modelo
 model.compile(optimizer=Adam(learning_rate=0.00001), loss='binary_crossentropy', metrics=['accuracy'])
 
@@ -96,3 +107,39 @@ model.compile(optimizer=Adam(learning_rate=0.00001), loss='binary_crossentropy',
 labeled_images = labeled_images.shuffle(buffer_size=10000)  # Aleatorizar el conjunto de datos
 labeled_images = labeled_images.batch(32)  # Definir el tamaño del lote
 model.fit(labeled_images, epochs=20)
+
+"""
+# Extraer las capas convolucionales del modelo entrenado
+conv_layers = model.layers[:-2]  # Excluir las dos capas densas (clasificador)
+
+# Crear un nuevo modelo solo con las capas convolucionales
+feature_extractor = models.Sequential(conv_layers)
+
+# Congelar las capas convolucionales (parte preentrenada)
+for layer in feature_extractor.layers:
+    layer.trainable = False
+
+# Crear un nuevo modelo para clasificación binaria (rostro o no rostro)
+new_classifier = models.Sequential([
+    # Agregar capas densas para la clasificación binaria
+    layers.Flatten(input_shape=(feature_extractor.output_shape[1:])),  # Aplanar las salidas convolucionales
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.5),
+    layers.Dense(1, activation='sigmoid')  # Capa de salida con una neurona y función de activación sigmoide para clasificación binaria
+])
+
+# Combinar el extractor de características y el nuevo clasificador
+new_model = models.Sequential([
+    feature_extractor,
+    new_classifier
+])
+
+# Compilar el nuevo modelo
+new_model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
+
+# Visualizar la arquitectura del nuevo modelo
+new_model.summary()
+
+
+#Entrenamos el nuevo modelo con el nuevo clasificador
+#new_model.fit(labeled_images, epochs=20)
