@@ -14,63 +14,57 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+#Debo cargar la nueva base de datos con imágenes etiquetadas con imágenes de mi rostro (1) 
+# e imagenes de rostros que no sean el mío (0)
+
 #Para evitar problemas con OpenMP
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 np.set_printoptions(precision=4)
 
+path_to_cara_images = '/Users/jxel/Reconocimiento-Facial/Cara/'
 
-#Eliminar el doble espacio entre algunos datos de la tabla
-with open('list_attr_celeba.txt', 'r') as f:
-   print("skipping : " + f.readline())
-   print("skipping headers : " + f.readline())
-   with open('attr_celeba_prepared.txt' , 'w') as newf:
-        for line in f:
-            new_line = ' '.join(line.split())
-            newf.write(new_line)
-            newf.write('\n')
 
-#Lee el archivo ya corregido y lo carga a un dataframe de pandas
-df = pd.read_csv("attr_celeba_prepared.txt" , sep=' ', header = None)
-
-"""
-print("----------")
-print(df[0].head())
-print(df.iloc[:,1:].head())
-print("----------")
-print(df.head())
-#exit()
-"""
-
-#Debo cargar la nueva base de datos con imágenes etiquetadas con imágenes de mi rostro (1) 
-# e imagenes de rostros que no sean el mío (0)
+df_cara = pd.read_csv("caraono.csv", sep=',', header=None)
 
 
 #Crea conjuntos de datos para nombres de archivos y atributos 
-files = tf.data.Dataset.from_tensor_slices(df[0])
+files_cara = tf.data.Dataset.from_tensor_slices(df_cara[0])
 
-attributes = tf.data.Dataset.from_tensor_slices(df.iloc[:,1:].to_numpy())
+attributes_cara = tf.data.Dataset.from_tensor_slices(df_cara.iloc[:,1:].to_numpy())
 
 
 #Combina los conjuntos de datos en uno solo
-data = tf.data.Dataset.zip((files, attributes))
-
-
-#Ruta del directorio donde están las imágenes
-path_to_images = 'img_align_celeba/'
+data_cara = tf.data.Dataset.zip((files_cara, attributes_cara))
 
 
 #Se procesan las imágenes con sus atributos
-def process_file(file_name, attributes):
-    image = tf.io.read_file(path_to_images + file_name)
+def process_file_cara(file_name, attributes):
+    image = tf.io.read_file(path_to_cara_images + file_name)
     image = tf.image.decode_jpeg(image, channels=3)
     image = tf.image.resize(image, [192, 192])
     image /= 255.0 
     return image, attributes
 
 #Aplica la función de procesamiento a cada elemento del conjunto de datos
-labeled_images = data.map(process_file)
+labeled_images = data_cara.map(process_file_cara)
 
-# print(labeled_images)
+
+
+# Dividir los datos en conjuntos de entrenamiento y prueba
+train_df, test_df = train_test_split(df_cara, test_size=0.2)
+
+
+# Crear conjuntos de datos para entrenamiento y prueba
+train_files = tf.data.Dataset.from_tensor_slices(train_df[0])
+train_attributes = tf.data.Dataset.from_tensor_slices(train_df.iloc[:, 1:].to_numpy())
+train_data = tf.data.Dataset.zip((train_files, train_attributes))
+
+test_files = tf.data.Dataset.from_tensor_slices(test_df[0])
+test_attributes = tf.data.Dataset.from_tensor_slices(test_df.iloc[:, 1:].to_numpy())
+test_data = tf.data.Dataset.zip((test_files, test_attributes))
+
+# Aplica la función de procesamiento a cada elemento del conjunto de datos de entrenamiento
+train_labeled_images = train_data.map(process_file_cara)
 
 
 #Visualiza las dos primeras imágenes del conjunto de datos.
@@ -78,13 +72,6 @@ for image, attri in labeled_images.take(2):
     plt.imshow(image)
     plt.show()
 
-
-
-
-"""
-# Dividir los datos en conjuntos de entrenamiento y prueba
-train_df, test_df = train_test_split(df, test_size=0.2)
-"""
 
 
 # Definir la arquitectura de la red convolucional
@@ -140,6 +127,9 @@ new_model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy
 # Visualizar la arquitectura del nuevo modelo
 new_model.summary()
 
+#Entrenar el modelo con los nuevos datos de mi cara
+train_labeled_images = train_labeled_images.shuffle(buffer_size=10000) #Aleatorizar el conjunto de entreanmiento
+train_labeled_images = train_labeled_images.batch(32) #Tamaño del lote
 
 #Entrenamos el nuevo modelo con el nuevo clasificador
-#new_model.fit(labeled_images, epochs=20)
+new_model.fit(train_labeled_images, epochs=40)
