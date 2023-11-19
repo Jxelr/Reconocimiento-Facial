@@ -13,6 +13,8 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from keras.models import load_model, Model
+
 
 #Debo cargar la nueva base de datos con imágenes etiquetadas con imágenes de mi rostro (1) 
 # e imagenes de rostros que no sean el mío (0)
@@ -20,6 +22,62 @@ import os
 #Para evitar problemas con OpenMP
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 np.set_printoptions(precision=4)
+
+"""
+#Eliminar el doble espacio entre algunos datos de la tabla
+with open('list_attr_celeba.txt', 'r') as f:
+   print("skipping : " + f.readline())
+   print("skipping headers : " + f.readline())
+   with open('attr_celeba_prepared.txt' , 'w') as newf:
+        for line in f:
+            new_line = ' '.join(line.split())
+            newf.write(new_line)
+            newf.write('\n')
+
+
+#Lee el archivo ya corregido y lo carga a un dataframe de pandas
+df = pd.read_csv("attr_celeba_prepared.txt" , sep=' ', header = None)
+
+
+#Crea conjuntos de datos para nombres de archivos y atributos 
+files = tf.data.Dataset.from_tensor_slices(df[0])
+
+attributes = tf.data.Dataset.from_tensor_slices(df.iloc[:,1:].to_numpy())
+
+
+#Combina los conjuntos de datos en uno solo
+data = tf.data.Dataset.zip((files, attributes))
+
+
+#Ruta del directorio donde están las imágenes
+path_to_images = 'img_align_celeba/'
+
+
+#Se procesan las imágenes con sus atributos
+def process_file(file_name, attributes):
+    image = tf.io.read_file(path_to_images + file_name)
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.resize(image, [192, 192])
+    image /= 255.0 
+    return image, attributes
+
+#Aplica la función de procesamiento a cada elemento del conjunto de datos
+labeled_images = data.map(process_file)
+
+#Visualiza las dos primeras imágenes del conjunto de datos.
+for image, attri in labeled_images.take(2):
+    plt.imshow(image)
+    plt.show()
+
+# Dividir los datos en conjuntos de entrenamiento y prueba
+train_df, test_df = train_test_split(df, test_size=0.2)
+
+"""
+# Cargar el modelo entrenado
+loaded_model = load_model('model.h5')
+
+# Ver la estructura del modelo cargado
+loaded_model.summary()
 
 path_to_cara_images = '/Users/jxel/Reconocimiento-Facial/Cara/'
 
@@ -88,16 +146,20 @@ model.add(layers.Dense(40, activation='sigmoid'))  # Capa de salida con 40 neuro
 
 """
 # Compilar el modelo
-model.compile(optimizer=Adam(learning_rate=0.00001), loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossentropy', metrics=['accuracy'])
 
 # Entrenar el modelo en los datos de CelebA
 labeled_images = labeled_images.shuffle(buffer_size=10000)  # Aleatorizar el conjunto de datos
 labeled_images = labeled_images.batch(32)  # Definir el tamaño del lote
 model.fit(labeled_images, epochs=20)
 
+
+# Guardar el modelo de capas convolucionales
+model.save('model.h5')
+
 """
 # Extraer las capas convolucionales del modelo entrenado
-conv_layers = model.layers[:-2]  # Excluir las dos capas densas (clasificador)
+conv_layers = loaded_model.layers[:-2]  # Excluir las dos capas densas (clasificador)
 
 # Crear un nuevo modelo solo con las capas convolucionales
 feature_extractor = models.Sequential(conv_layers)
@@ -129,7 +191,8 @@ new_model.summary()
 
 #Entrenar el modelo con los nuevos datos de mi cara
 train_labeled_images = train_labeled_images.shuffle(buffer_size=10000) #Aleatorizar el conjunto de entreanmiento
-train_labeled_images = train_labeled_images.batch(32) #Tamaño del lote
+train_labeled_images = train_labeled_images.batch(5) #Tamaño del lote
 
 #Entrenamos el nuevo modelo con el nuevo clasificador
 new_model.fit(train_labeled_images, epochs=40)
+
